@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/algorand-institutional-audit-report.schema.json",
+  "title": "Algorand Institutional Audit Report",
+  "type": "object",
+  "required": [
+    "audit",
+    "connection",
+    "institution",
+    "settlements",
+    "nostroDebits",
+    "datasetHashes"
+  ],
+  "properties": {
+    "audit": {
+      "type": "object",
+      "required": ["id", "masterHash", "generatedAt", "classification"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^AUD-[0-9]{8}-[A-Z0-9]+$" },
+        "masterHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "generatedAt": { "type": "string", "format": "date-time" },
+        "auditor": { "type": "string" },
+        "classification": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "connection": {
+      "type": "object",
+      "required": ["status", "network", "genesisId", "genesisHash", "currentRound"],
+      "properties": {
+        "status": { "type": "string", "enum": ["CONNECTED", "DEGRADED", "DISCONNECTED"] },
+        "network": { "type": "string", "const": "Algorand MainNet" },
+        "genesisId": { "type": "string", "const": "mainnet-v1.0" },
+        "genesisHash": { "type": "string", "const": "wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8=" },
+        "currentRound": { "type": "integer", "minimum": 1 },
+        "suggestedFeeMicroAlgos": { "type": "integer", "minimum": 0 },
+        "latencyMs": { "type": "integer", "minimum": 0 },
+        "errors": { "type": "integer", "minimum": 0 },
+        "gatewayEndpoint": { "type": "string", "format": "uri" },
+        "algodUpstreamId": { "type": "string" },
+        "indexerUpstreamId": { "type": "string" },
+        "lastConnectedAt": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "institution": {
+      "type": "object",
+      "required": ["name", "bic"],
+      "properties": {
+        "name": { "type": "string" },
+        "bic": { "type": "string" },
+        "license": { "type": "string" },
+        "lei": { "type": "string" },
+        "address": { "type": "string" },
+        "operator": { "type": "string" },
+        "platform": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "wallets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["role", "address"],
+        "properties": {
+          "role": { "type": "string" },
+          "address": { "type": "string", "minLength": 58, "maxLength": 58 },
+          "algoBalance": { "type": "string" },
+          "assetHoldings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["assetId", "unitName", "amount"],
+              "properties": {
+                "assetId": { "type": "integer", "minimum": 1 },
+                "unitName": { "type": "string" },
+                "amount": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "settlements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "reference",
+          "uetr",
+          "amount",
+          "asset",
+          "destinationAddress",
+          "transactionId",
+          "status",
+          "settlementHash"
+        ],
+        "properties": {
+          "reference": { "type": "string" },
+          "uetr": { "type": "string", "format": "uuid" },
+          "amount": { "type": "string" },
+          "asset": { "type": "string" },
+          "assetId": { "type": "integer", "minimum": 0 },
+          "sourceAccount": { "type": "string" },
+          "sourceBic": { "type": "string" },
+          "destinationAddress": { "type": "string", "minLength": 58, "maxLength": 58 },
+          "transactionId": { "type": "string", "minLength": 52, "maxLength": 52 },
+          "groupId": { "type": "string" },
+          "confirmedRound": { "type": "integer", "minimum": 1 },
+          "feeMicroAlgos": { "type": "integer", "minimum": 0 },
+          "firstValid": { "type": "integer", "minimum": 1 },
+          "lastValid": { "type": "integer", "minimum": 1 },
+          "noteHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "simulationStatus": { "type": "string", "enum": ["PASS", "FAIL", "NOT_RUN"] },
+          "status": { "type": "string", "enum": ["SUBMITTED", "PENDING", "CONFIRMED", "FAILED"] },
+          "gatewayRequestId": { "type": "string" },
+          "indexerEvidenceRequestId": { "type": "string" },
+          "hmacSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "bodyHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "bodyBytes": { "type": "integer", "minimum": 0 },
+          "signedAt": { "type": "string", "format": "date-time" },
+          "responseTimeMs": { "type": "integer", "minimum": 0 },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "settlementHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "pacs008Files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["fileName", "fileHash"],
+        "properties": {
+          "fileName": { "type": "string" },
+          "fileHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "nostroDebits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["reference", "uetr", "amount", "debitHash"],
+        "properties": {
+          "reference": { "type": "string" },
+          "uetr": { "type": "string", "format": "uuid" },
+          "amount": { "type": "string" },
+          "source": { "type": "string" },
+          "debitHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "datasetHashes": {
+      "type": "object",
+      "required": ["settlementsHash", "nostroDebitsHash", "connectionHash"],
+      "properties": {
+        "settlementsHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "nostroDebitsHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "pacs008QueueHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "gatewayLogsHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "connectionHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

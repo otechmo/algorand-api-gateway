@@ -1,0 +1,206 @@
+openapi: 3.0.3
+info:
+  title: Algorand MainNet API Gateway
+  version: 1.0.0
+servers:
+  - url: https://algo-gateway.example.bank-partner.com
+security:
+  - bearerAuth: []
+  - apiKeyAuth: []
+paths:
+  /health:
+    get:
+      security: []
+      summary: Local liveness check
+      responses:
+        "200":
+          description: Gateway process is alive
+  /ready:
+    get:
+      summary: Upstream readiness check
+      responses:
+        "200":
+          description: Required upstreams are ready
+        "503":
+          description: A required upstream is unavailable or not MainNet
+  /v1/network/status:
+    get:
+      summary: Current algod node status
+      responses:
+        "200":
+          description: Algod status
+  /v1/network/params:
+    get:
+      summary: Transaction parameters with MainNet verification
+      responses:
+        "200":
+          description: Transaction params
+  /v1/accounts/{address}:
+    get:
+      summary: Current account information
+      parameters:
+        - $ref: "#/components/parameters/address"
+        - name: exclude
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Account information
+  /v1/accounts/{address}/assets/{assetId}:
+    get:
+      summary: Current account asset holding
+      parameters:
+        - $ref: "#/components/parameters/address"
+        - $ref: "#/components/parameters/assetId"
+      responses:
+        "200":
+          description: Asset holding information
+  /v1/accounts/{address}/transactions:
+    get:
+      summary: Historical account transactions
+      parameters:
+        - $ref: "#/components/parameters/address"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/next"
+      responses:
+        "200":
+          description: Matching transactions
+  /v1/assets/{assetId}:
+    get:
+      summary: Asset information
+      parameters:
+        - $ref: "#/components/parameters/assetId"
+      responses:
+        "200":
+          description: Asset information
+  /v1/assets/{assetId}/transactions:
+    get:
+      summary: Historical asset transactions
+      parameters:
+        - $ref: "#/components/parameters/assetId"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/next"
+      responses:
+        "200":
+          description: Matching transactions
+  /v1/blocks/{round}:
+    get:
+      summary: Block lookup
+      parameters:
+        - $ref: "#/components/parameters/round"
+      responses:
+        "200":
+          description: Block data
+  /v1/transactions/{txId}:
+    get:
+      summary: Confirmed transaction lookup
+      parameters:
+        - $ref: "#/components/parameters/txId"
+      responses:
+        "200":
+          description: Transaction data
+  /v1/transactions/pending/{txId}:
+    get:
+      summary: Pending transaction lookup
+      parameters:
+        - $ref: "#/components/parameters/txId"
+      responses:
+        "200":
+          description: Pending transaction data
+  /v1/transactions:
+    post:
+      summary: Submit raw signed transaction bytes or base64 JSON
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/x-binary:
+            schema:
+              type: string
+              format: binary
+          application/json:
+            schema:
+              type: object
+              required:
+                - signedTransaction
+              properties:
+                signedTransaction:
+                  type: string
+                encoding:
+                  type: string
+                  enum:
+                    - base64
+      responses:
+        "202":
+          description: Transaction accepted by algod
+  /v1/transactions/simulate:
+    post:
+      summary: Simulate transactions using algod
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Simulation result
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+  parameters:
+    address:
+      name: address
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 58
+        maxLength: 58
+    assetId:
+      name: assetId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[0-9]+$"
+    round:
+      name: round
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[0-9]+$"
+    txId:
+      name: txId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 52
+        maxLength: 52
+    limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 1000
+    next:
+      name: next
+      in: query
+      schema:
+        type: string
+        maxLength: 2048

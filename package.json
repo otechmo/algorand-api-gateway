@@ -1,0 +1,15 @@
+{
+  "name": "algorand-api-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Bank-facing API gateway for Algorand MainNet algod and indexer services.",
+  "engines": {
+    "node": ">=20.0"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node scripts/run-tests.js",
+    "check": "node scripts/check-syntax.js"
+  }
+}
