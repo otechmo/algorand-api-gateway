@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
-const roots = ['src', 'test', 'scripts']
+const roots = ['api', 'src', 'test', 'scripts']
 const files = roots.flatMap((root) => findJavaScriptFiles(root))
 let failed = false
 

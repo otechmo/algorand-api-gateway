@@ -103,6 +103,25 @@ npm start
 
 This project intentionally has no runtime npm dependencies. It requires Node 20 or newer.
 
+## Deploy To Vercel
+
+This gateway includes a Vercel Function adapter in `api/gateway.js` and `vercel.json`. Vercel terminates HTTPS before requests reach the function, so keep `REQUIRE_TLS=false` and `MTLS_REQUIRED=false` on Vercel. If the bank requires mTLS, terminate mTLS at an enterprise edge, private proxy, or load balancer in front of this service.
+
+Required Vercel environment variables:
+
+- `ALGOD_URL`
+- `BANK_API_KEY_HASHES`
+- `INDEXER_URL` if `REQUIRE_INDEXER=true`
+- `TRUST_PROXY=true`
+- `ENFORCE_MAINNET=true`
+- any upstream token variables required by your approved algod/indexer endpoints
+
+Deploy with:
+
+```bash
+vercel deploy --prod --yes --scope otechmo20-2970s-projects
+```
+
 ## Production Checklist
 
 - Point `ALGOD_URL` and `INDEXER_URL` at your own MainNet infrastructure or a private approved upstream.
