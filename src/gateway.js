@@ -58,6 +58,7 @@ export function createGatewayHandler(config, deps = {}) {
 
     try {
       const url = new URL(req.url || '/', 'http://gateway.local')
+      stripInternalRouteParams(url)
 
       if (url.pathname === '/health') {
         sendJson(res, 200, {
@@ -357,6 +358,10 @@ function rejectQuery(url) {
   if ([...url.searchParams.keys()].length > 0) {
     throw new HttpError(400, 'validation_error', 'Query parameters are not supported for this route.')
   }
+}
+
+function stripInternalRouteParams(url) {
+  url.searchParams.delete('gatewayPath')
 }
 
 function auditLog(logger, req, res, ctx, startedAt) {

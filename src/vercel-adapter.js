@@ -48,9 +48,9 @@ export function createLazyProductionFetchHandler() {
 class FetchBackedRequest {
   constructor(request) {
     const url = new URL(request.url)
-    this.method = request.method
-    this.url = gatewayUrlFromRequestUrl(url)
     this.headers = headersToNodeObject(request.headers)
+    this.method = request.method
+    this.url = gatewayUrlFromRequestUrl(url, this.headers)
     this.socket = {
       remoteAddress: clientIpFromHeaders(this.headers),
     }
@@ -106,15 +106,57 @@ class FetchBackedResponse {
   }
 }
 
-function gatewayUrlFromRequestUrl(url) {
-  const gatewayPath = url.searchParams.get('gatewayPath')
-  if (gatewayPath !== null) {
-    url.searchParams.delete('gatewayPath')
+function gatewayUrlFromRequestUrl(url, headers = {}) {
+  const gatewayPath = getCapturedGatewayPath(url, headers)
+  if (gatewayPath) {
     const normalizedPath = gatewayPath.startsWith('/') ? gatewayPath : `/${gatewayPath}`
-    return `${normalizedPath}${url.search}`
+    return `${normalizedPath}${externalSearch(url.searchParams)}`
   }
 
   return `${url.pathname}${url.search}`
+}
+
+function externalSearch(searchParams) {
+  const external = new URLSearchParams()
+
+  for (const [key, value] of searchParams.entries()) {
+    if (!isInternalRouteParam(key)) {
+      external.append(key, value)
+    }
+  }
+
+  const value = external.toString()
+  return value ? `?${value}` : ''
+}
+
+function isInternalRouteParam(key) {
+  return ['gatewaypath', 'path'].includes(key.toLowerCase())
+}
+
+function getCapturedGatewayPath(url, headers) {
+  for (const key of ['gatewayPath', 'path']) {
+    const value = url.searchParams.get(key)
+    if (isCapturedPath(value)) {
+      return value
+    }
+  }
+
+  const routeMatches = headers['x-now-route-matches']
+  if (routeMatches) {
+    const params = new URLSearchParams(routeMatches)
+    for (const key of ['gatewayPath', 'path']) {
+      const value = params.get(key)
+      if (isCapturedPath(value)) {
+        return value
+      }
+    }
+  }
+
+  return null
+}
+
+function isCapturedPath(value) {
+  return Boolean(value && value !== ':path*' && value !== '/:path*')
 }
 
 function headersToNodeObject(headers) {

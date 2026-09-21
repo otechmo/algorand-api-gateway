@@ -56,6 +56,24 @@ test('adds default pagination to indexer transaction searches', async () => {
   }
 })
 
+test('strips Vercel gatewayPath route capture from client query validation', async () => {
+  const fixture = await createFixture()
+  try {
+    const response = await fixture.fetch(
+      `/v1/accounts/${VALID_ADDRESS}/transactions?limit=1&gatewayPath=v1/accounts/${VALID_ADDRESS}/transactions`,
+    )
+    assert.equal(response.status, 200)
+
+    const indexerRequest = fixture.state.indexerRequests.find((request) => {
+      return request.pathname === `/v2/accounts/${VALID_ADDRESS}/transactions`
+    })
+    assert.equal(indexerRequest.searchParams.get('limit'), '1')
+    assert.equal(indexerRequest.searchParams.has('gatewayPath'), false)
+  } finally {
+    await fixture.close()
+  }
+})
+
 test('proxies pending transactions, account asset holdings, blocks, and asset transaction searches', async () => {
   const fixture = await createFixture()
   try {
