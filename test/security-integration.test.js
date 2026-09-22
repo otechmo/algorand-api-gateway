@@ -124,6 +124,27 @@ test('rejects invalid API key from path prefix', async () => {
   }
 })
 
+test('supports Alchemy-style self-service audit evidence URL with configured receiver wallet', async () => {
+  const fixture = await createFixture({
+    configOverrides: {
+      audit: {
+        receiverWallet: VALID_ADDRESS,
+      },
+    },
+  })
+  try {
+    const response = await fixture.rawFetch('/v2/bank-secret/audit/evidence?limit=1')
+    assert.equal(response.status, 200)
+
+    const body = await response.json()
+    assert.equal(body.data.walletEvidence.address, VALID_ADDRESS)
+    assert.equal(body.data.gateway.keyDisclosure, 'API key is authenticated but not returned in this evidence payload.')
+    assert.equal(JSON.stringify(body).includes('bank-secret'), false)
+  } finally {
+    await fixture.close()
+  }
+})
+
 test('rejects oversized request bodies before upstream submission', async () => {
   const fixture = await createFixture({
     configOverrides: {

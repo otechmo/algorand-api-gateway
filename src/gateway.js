@@ -4,11 +4,13 @@ import {
   assertTransactionId,
   assertUInt64,
   blockQuery,
+  commonQuery,
   indexerTransactionQuery,
   sanitizeQuery,
   validateIdempotencyKey,
   withDefaultLimit,
 } from './validators.js'
+import { hashCanonicalJson } from './audit-hash.js'
 import { HttpError } from './errors.js'
 import { IdempotencyCache } from './idempotency.js'
 import { TokenBucketLimiter } from './rate-limit.js'
@@ -127,6 +129,11 @@ async function routeRequest(req, res, url, ctx, config, upstream, idempotency) {
     })
     const network = await upstream.verifyNetwork({ requestId: ctx.requestId })
     sendJson(res, 200, successEnvelope(ctx, params.data, { service: 'algod', networkVerified: network.verified }))
+    return
+  }
+
+  if (segments[1] === 'audit' && segments[2] === 'evidence' && segments.length === 3) {
+    await routeAuditEvidence(req, res, url, ctx, config, upstream)
     return
   }
 
@@ -297,6 +304,63 @@ async function submitSimulation(req, res, ctx, config, upstream) {
   sendJson(res, 200, successEnvelope(ctx, upstreamResponse.data, { service: 'algod' }))
 }
 
+async function routeAuditEvidence(req, res, url, ctx, config, upstream) {
+  assertMethod(req, 'GET')
+  const options = parseAuditEvidenceOptions(url, config)
+  const capturedAt = new Date().toISOString()
+  const startedAt = Date.now()
+
+  const readiness = await upstream.checkReadiness(ctx.requestId)
+  const status = await upstream.request('algod', {
+    method: 'GET',
+    path: '/v2/status',
+    requestId: ctx.requestId,
+    retrySafe: true,
+  })
+  const params = await upstream.request('algod', {
+    method: 'GET',
+    path: '/v2/transactions/params',
+    requestId: ctx.requestId,
+    retrySafe: true,
+  })
+  const network = await upstream.verifyNetwork({ requestId: ctx.requestId })
+  const account = await upstream.request('algod', {
+    method: 'GET',
+    path: `/v2/accounts/${options.wallet}`,
+    requestId: ctx.requestId,
+    retrySafe: true,
+  })
+  const transactionQuery = new URLSearchParams()
+  transactionQuery.set('limit', options.limit)
+  const transactions = await upstream.request('indexer', {
+    method: 'GET',
+    path: `/v2/accounts/${options.wallet}/transactions`,
+    query: transactionQuery,
+    requestId: ctx.requestId,
+    retrySafe: true,
+  })
+
+  const evidence = buildAuditEvidence({
+    capturedAt,
+    ctx,
+    config,
+    wallet: options.wallet,
+    readiness,
+    status: status.data,
+    params: params.data,
+    network,
+    account: account.data,
+    transactions: transactions.data,
+    latencyMs: Date.now() - startedAt,
+  })
+  evidence.audit.evidenceHash = hashCanonicalJson(evidence)
+  evidence.audit.reportText = buildAuditReportText(evidence)
+
+  sendJson(res, 200, successEnvelope(ctx, evidence, { service: 'gateway', evidenceType: 'audit-evidence' }), {
+    'Content-Disposition': `attachment; filename="${auditEvidenceFilename(capturedAt)}"`,
+  })
+}
+
 async function readSignedTransactionBody(req, config) {
   const contentType = firstHeader(req, 'content-type') || 'application/octet-stream'
   const body = await readRequestBody(req, config.security.maxBodyBytes)
@@ -327,6 +391,152 @@ async function readSignedTransactionBody(req, config) {
   }
 
   return body
+}
+
+function parseAuditEvidenceOptions(url, config) {
+  const supported = new Set(['wallet', 'limit'])
+  for (const key of url.searchParams.keys()) {
+    if (!supported.has(key)) {
+      throw new HttpError(400, 'validation_error', `Unsupported query parameter: ${key}.`)
+    }
+  }
+
+  const wallet = assertAlgorandAddress(url.searchParams.get('wallet') || config.audit.receiverWallet)
+  const limit = url.searchParams.has('limit')
+    ? commonQuery.limit(url.searchParams.get('limit'), config)
+    : String(Math.min(10, config.pagination.maxPageLimit))
+
+  return {
+    wallet,
+    limit,
+  }
+}
+
+function buildAuditEvidence({ capturedAt, ctx, config, wallet, readiness, status, params, network, account, transactions, latencyMs }) {
+  const auditId = `ALG-${capturedAt.slice(0, 10).replace(/-/g, '')}-${ctx.requestId.replace(/-/g, '').slice(0, 8).toUpperCase()}`
+  const publicBaseUrl = config.service.publicBaseUrl || null
+  const txList = Array.isArray(transactions?.transactions) ? transactions.transactions : []
+  const sampleTransaction = txList[0] || null
+
+  return {
+    audit: {
+      title: 'FULL AUDIT EVIDENCE - ALGORAND MAINNET API GATEWAY',
+      auditId,
+      classification: 'CONFIDENTIAL - INSTITUTIONAL USE ONLY',
+      generatedAt: capturedAt,
+      auditor: 'AUTOMATED CRYPTOGRAPHIC SYSTEM AUDIT',
+      requestId: ctx.requestId,
+      evidenceHash: null,
+      reportText: null,
+    },
+    gateway: {
+      service: config.service.name,
+      environment: config.service.env,
+      publicBaseUrl,
+      bankEndpointTemplate: publicBaseUrl ? `${publicBaseUrl}/v2/<BANK_API_KEY>/audit/evidence` : '/v2/<BANK_API_KEY>/audit/evidence',
+      keyDisclosure: 'API key is authenticated but not returned in this evidence payload.',
+    },
+    connectionStatus: {
+      status: readiness.ready ? 'CONNECTED' : 'DEGRADED',
+      network: 'Algorand MainNet',
+      genesisId: network.genesisId,
+      genesisHash: network.genesisHash,
+      currentRound: status?.['last-round'] ?? null,
+      suggestedFeeMicroAlgos: params?.fee ?? null,
+      minFeeMicroAlgos: params?.['min-fee'] ?? null,
+      latencyMs,
+      algodOk: readiness.checks.algod?.ok === true,
+      indexerOk: readiness.checks.indexer?.ok === true,
+      mainnetVerified: network.verified === true,
+      readinessChecks: readiness.checks,
+      errors: readiness.ready ? 0 : 1,
+    },
+    walletEvidence: {
+      address: wallet,
+      account,
+      transactionSearch: {
+        limit: Number(transactions?.transactions?.length ?? 0),
+        currentRound: transactions?.['current-round'] ?? null,
+        nextToken: transactions?.['next-token'] ?? null,
+        transactions: txList,
+      },
+      sampleTransaction: sampleTransaction
+        ? {
+            id: sampleTransaction.id,
+            type: sampleTransaction['tx-type'],
+            confirmedRound: sampleTransaction['confirmed-round'],
+            sender: sampleTransaction.sender,
+            roundTime: sampleTransaction['round-time'],
+          }
+        : null,
+    },
+    bankFileInstructions: {
+      recommendedFilename: auditEvidenceFilename(capturedAt),
+      contentType: 'application/json',
+      saveInstruction: 'Save this response body as the evidence JSON file for the bank audit pack.',
+      canGeneratePdf: true,
+      pdfInstruction: 'The bank can render this JSON into its internal PDF or compliance report template.',
+    },
+    settlementReconciliationRequirements: {
+      providedByGateway: [
+        'MainNet connection status',
+        'Genesis verification',
+        'Current round and transaction parameters',
+        'Receiver wallet account evidence',
+        'Indexer-backed transaction history',
+        'Request ID for SIEM correlation',
+      ],
+      requiredFromBankSystems: [
+        'Payment reference',
+        'UETR',
+        'pacs.008.001.08 file or JSON',
+        'Nostro debit record',
+        'Settlement amount and currency or asset ID',
+        'HMAC signature and body hash',
+        'Final reconciliation status',
+      ],
+    },
+  }
+}
+
+function buildAuditReportText(evidence) {
+  const sample = evidence.walletEvidence.sampleTransaction
+  return [
+    '===============================================================================',
+    ' FULL AUDIT EVIDENCE - ALGORAND MAINNET API GATEWAY',
+    '===============================================================================',
+    ` AUDIT ID: ${evidence.audit.auditId}`,
+    ` EVIDENCE HASH: ${evidence.audit.evidenceHash}`,
+    ` GENERATED: ${evidence.audit.generatedAt}`,
+    ` CLASSIFICATION: ${evidence.audit.classification}`,
+    '===============================================================================',
+    ' [1] ALGORAND GATEWAY CONNECTION STATUS',
+    '-------------------------------------------------------------------------------',
+    ` Status: ${evidence.connectionStatus.status}`,
+    ` Network: ${evidence.connectionStatus.network}`,
+    ` Current Round: ${evidence.connectionStatus.currentRound}`,
+    ` Genesis ID: ${evidence.connectionStatus.genesisId}`,
+    ` Genesis Hash: ${evidence.connectionStatus.genesisHash}`,
+    ` Suggested Fee: ${evidence.connectionStatus.suggestedFeeMicroAlgos} microAlgos`,
+    ` Min Fee: ${evidence.connectionStatus.minFeeMicroAlgos} microAlgos`,
+    ` Latency: ${evidence.connectionStatus.latencyMs}ms`,
+    ` Errors: ${evidence.connectionStatus.errors}`,
+    ` Gateway Endpoint: ${evidence.gateway.bankEndpointTemplate}`,
+    ' [2] RECEIVER WALLET ON-CHAIN EVIDENCE',
+    '-------------------------------------------------------------------------------',
+    ` Wallet: ${evidence.walletEvidence.address}`,
+    ` Transaction Evidence Count: ${evidence.walletEvidence.transactionSearch.limit}`,
+    sample ? ` Sample Transaction ID: ${sample.id}` : ' Sample Transaction ID: none',
+    sample ? ` Sample Confirmed Round: ${sample.confirmedRound}` : ' Sample Confirmed Round: none',
+    ' [3] BANK SETTLEMENT FILE REQUIREMENTS',
+    '-------------------------------------------------------------------------------',
+    ' Bank should add UETR, pacs.008, Nostro debit, amount, HMAC, body hash, and final reconciliation status.',
+    '===============================================================================',
+  ].join('\n')
+}
+
+function auditEvidenceFilename(capturedAt) {
+  return `algorand-mainnet-audit-evidence-${capturedAt.slice(0, 10)}.json`
 }
 
 async function proxyJson(res, ctx, upstream, service, path, query = new URLSearchParams()) {

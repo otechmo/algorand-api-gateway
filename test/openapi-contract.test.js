@@ -7,6 +7,7 @@ const expectedPaths = [
   '/ready',
   '/v1/network/status',
   '/v1/network/params',
+  '/v1/audit/evidence',
   '/v1/accounts/{address}',
   '/v1/accounts/{address}/assets/{assetId}',
   '/v1/accounts/{address}/transactions',

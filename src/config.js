@@ -79,6 +79,9 @@ export function loadConfig(env = process.env) {
       expectedGenesisHash: env.EXPECTED_GENESIS_HASH || MAINNET_GENESIS_HASH,
       verifyTtlMs: parseInteger(env.NETWORK_VERIFY_TTL_MS, 60000, 1000, 3600000, 'NETWORK_VERIFY_TTL_MS'),
     },
+    audit: {
+      receiverWallet: emptyToNull(env.AUDIT_RECEIVER_WALLET),
+    },
     auth: {
       apiKeyHashes,
       allowUnauthenticated,

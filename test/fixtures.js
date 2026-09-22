@@ -187,6 +187,9 @@ export function defaultConfig(algodUrl = 'http://127.0.0.1:1', indexerUrl = 'htt
       expectedGenesisHash: MAINNET_GENESIS_HASH,
       verifyTtlMs: 1000,
     },
+    audit: {
+      receiverWallet: null,
+    },
     auth: {
       apiKeyHashes: [sha256Buffer('bank-secret')],
       allowUnauthenticated: false,

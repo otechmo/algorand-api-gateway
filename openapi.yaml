@@ -35,6 +35,24 @@ paths:
       responses:
         "200":
           description: Transaction params
+  /v1/audit/evidence:
+    get:
+      summary: Self-service bank audit evidence JSON file
+      parameters:
+        - name: wallet
+          in: query
+          description: Optional Algorand receiver wallet. Uses configured AUDIT_RECEIVER_WALLET when omitted.
+          schema:
+            type: string
+        - $ref: "#/components/parameters/limit"
+      responses:
+        "200":
+          description: Downloadable JSON evidence payload for bank-side report generation
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: Suggested JSON filename for browser/client save-as behavior
   /v1/accounts/{address}:
     get:
       summary: Current account information

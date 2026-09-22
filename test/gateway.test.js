@@ -219,3 +219,29 @@ test('returns MainNet params with network verification metadata', async () => {
     await fixture.close()
   }
 })
+
+test('returns bank self-service audit evidence as a downloadable JSON file', async () => {
+  const fixture = await createFixture()
+  try {
+    const response = await fixture.fetch(`/v1/audit/evidence?wallet=${VALID_ADDRESS}&limit=1`)
+    assert.equal(response.status, 200)
+    assert.match(response.headers.get('content-disposition'), /algorand-mainnet-audit-evidence-/)
+
+    const body = await response.json()
+    assert.equal(body.data.audit.title, 'FULL AUDIT EVIDENCE - ALGORAND MAINNET API GATEWAY')
+    assert.equal(body.data.connectionStatus.status, 'CONNECTED')
+    assert.equal(body.data.connectionStatus.mainnetVerified, true)
+    assert.equal(body.data.walletEvidence.address, VALID_ADDRESS)
+    assert.equal(body.data.walletEvidence.transactionSearch.transactions.length, 1)
+    assert.match(body.data.audit.evidenceHash, /^[a-f0-9]{64}$/)
+    assert.match(body.data.audit.reportText, /ALGORAND GATEWAY CONNECTION STATUS/)
+    assert.equal(body.data.settlementReconciliationRequirements.requiredFromBankSystems.includes('pacs.008.001.08 file or JSON'), true)
+
+    const indexerRequest = fixture.state.indexerRequests.find((request) => {
+      return request.pathname === `/v2/accounts/${VALID_ADDRESS}/transactions`
+    })
+    assert.equal(indexerRequest.searchParams.get('limit'), '1')
+  } finally {
+    await fixture.close()
+  }
+})
