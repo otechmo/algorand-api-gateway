@@ -42,14 +42,14 @@ export function loadConfig(env = process.env) {
 
   const defaultPageLimit = parseInteger(env.DEFAULT_PAGE_LIMIT, 100, 1, 10000, 'DEFAULT_PAGE_LIMIT')
   const maxPageLimit = parseInteger(env.MAX_PAGE_LIMIT, 1000, defaultPageLimit, 10000, 'MAX_PAGE_LIMIT')
-  const submissionAsaReceiverWallet = parseOptionalAlgorandAddress(
-    env.SUBMISSION_ASA_RECEIVER_WALLET || env.ASA_TRANSFER_RECEIVER_WALLET,
-    'SUBMISSION_ASA_RECEIVER_WALLET',
+  const submissionReceiverWallet = parseOptionalAlgorandAddress(
+    env.SUBMISSION_RECEIVER_WALLET || env.SUBMISSION_ASA_RECEIVER_WALLET || env.ASA_TRANSFER_RECEIVER_WALLET,
+    'SUBMISSION_RECEIVER_WALLET',
   )
   const submissionAllowedAssetIds = parseUInt64List(env.SUBMISSION_ALLOWED_ASSET_IDS, 'SUBMISSION_ALLOWED_ASSET_IDS')
 
-  if (submissionAllowedAssetIds.length > 0 && !submissionAsaReceiverWallet) {
-    throw new ConfigurationError('SUBMISSION_ASA_RECEIVER_WALLET is required when SUBMISSION_ALLOWED_ASSET_IDS is set.')
+  if (submissionAllowedAssetIds.length > 0 && !submissionReceiverWallet) {
+    throw new ConfigurationError('SUBMISSION_RECEIVER_WALLET is required when SUBMISSION_ALLOWED_ASSET_IDS is set.')
   }
 
   return {
@@ -94,7 +94,7 @@ export function loadConfig(env = process.env) {
       receiverWallet: emptyToNull(env.AUDIT_RECEIVER_WALLET),
     },
     submission: {
-      asaReceiverWallet: submissionAsaReceiverWallet,
+      receiverWallet: submissionReceiverWallet,
       allowedAssetIds: submissionAllowedAssetIds,
     },
     auth: {

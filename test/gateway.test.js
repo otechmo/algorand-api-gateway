@@ -131,42 +131,57 @@ test('verifies MainNet before accepting transaction submissions and replays idem
   }
 })
 
-test('allows only ASA transfers to the configured receiver wallet for submissions', async () => {
+test('allows ALGO payments and ASA transfers to the configured receiver wallet for submissions', async () => {
   const fixture = await createFixture({
     configOverrides: {
       submission: {
-        asaReceiverWallet: RECEIVER_WALLET,
+        receiverWallet: RECEIVER_WALLET,
       },
     },
   })
   try {
-    const body = signedTransactionBytes({
+    const algoPayment = signedTransactionBytes({
+      type: 'pay',
+      amt: 1000000,
+      rcv: decodeAlgorandAddress(RECEIVER_WALLET),
+    })
+    const algoResponse = await fixture.fetch('/v1/transactions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-binary',
+      },
+      body: algoPayment,
+    })
+
+    assert.equal(algoResponse.status, 202)
+
+    const asaTransfer = signedTransactionBytes({
       type: 'axfer',
       xaid: 31566704,
       aamt: 1000000,
       arcv: decodeAlgorandAddress(RECEIVER_WALLET),
     })
 
-    const response = await fixture.fetch('/v1/transactions', {
+    const asaResponse = await fixture.fetch('/v1/transactions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-binary',
       },
-      body,
+      body: asaTransfer,
     })
 
-    assert.equal(response.status, 202)
-    assert.equal(fixture.state.submissions, 1)
+    assert.equal(asaResponse.status, 202)
+    assert.equal(fixture.state.submissions, 2)
   } finally {
     await fixture.close()
   }
 })
 
-test('rejects non-ASA or misdirected transaction submissions before algod broadcast', async () => {
+test('rejects unsupported or misdirected transaction submissions before algod broadcast', async () => {
   const fixture = await createFixture({
     configOverrides: {
       submission: {
-        asaReceiverWallet: RECEIVER_WALLET,
+        receiverWallet: RECEIVER_WALLET,
       },
     },
   })
@@ -175,7 +190,18 @@ test('rejects non-ASA or misdirected transaction submissions before algod broadc
       signedTransactionBytes({
         type: 'pay',
         amt: 1000000,
+        rcv: decodeAlgorandAddress(VALID_ADDRESS),
+      }),
+      signedTransactionBytes({
+        type: 'pay',
+        amt: 0,
         rcv: decodeAlgorandAddress(RECEIVER_WALLET),
+      }),
+      signedTransactionBytes({
+        type: 'pay',
+        amt: 1000000,
+        rcv: decodeAlgorandAddress(RECEIVER_WALLET),
+        close: decodeAlgorandAddress(RECEIVER_WALLET),
       }),
       signedTransactionBytes({
         type: 'axfer',
@@ -209,6 +235,10 @@ test('rejects non-ASA or misdirected transaction submissions before algod broadc
         aamt: 1000000,
         arcv: decodeAlgorandAddress(RECEIVER_WALLET),
         rekey: decodeAlgorandAddress(VALID_ADDRESS),
+      }),
+      signedTransactionBytes({
+        type: 'appl',
+        apan: 0,
       }),
     ]
 

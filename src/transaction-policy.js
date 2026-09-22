@@ -6,7 +6,8 @@ const MAX_MSGPACK_COLLECTION_LENGTH = 100000
 
 export function enforceSubmissionPolicy(body, config) {
   const policy = config.submission || {}
-  if (!policy.asaReceiverWallet) {
+  const receiverWallet = policy.receiverWallet || policy.asaReceiverWallet
+  if (!receiverWallet) {
     return
   }
 
@@ -16,7 +17,7 @@ export function enforceSubmissionPolicy(body, config) {
   }
 
   for (const signedTransaction of signedTransactions) {
-    enforceAsaTransferToReceiver(signedTransaction, policy)
+    enforceTransactionToReceiver(signedTransaction, { ...policy, receiverWallet })
   }
 }
 
@@ -37,23 +38,58 @@ export function decodeSignedTransactions(body) {
   return values.flatMap((value) => (Array.isArray(value) ? value : [value]))
 }
 
-function enforceAsaTransferToReceiver(signedTransaction, policy) {
+function enforceTransactionToReceiver(signedTransaction, policy) {
   if (!isPlainObject(signedTransaction) || !isPlainObject(signedTransaction.txn)) {
     throw new HttpError(400, 'validation_error', 'Signed transaction payload must contain a txn object.')
   }
 
   const txn = signedTransaction.txn
-  if (txn.type !== 'axfer') {
-    throw policyViolation('Only Algorand Standard Asset transfer transactions are allowed.')
+
+  if (txn.type === 'pay') {
+    enforceAlgoPaymentToReceiver(txn, policy)
+    return
   }
 
+  if (txn.type === 'axfer') {
+    enforceAsaTransferToReceiver(txn, policy)
+    return
+  }
+
+  throw policyViolation('Only ALGO payments or ASA transfers to the configured receiver wallet are allowed.')
+}
+
+function enforceAlgoPaymentToReceiver(txn, policy) {
+  if (!Buffer.isBuffer(txn.rcv) || txn.rcv.length !== 32) {
+    throw new HttpError(400, 'validation_error', 'ALGO payment receiver is missing or invalid.')
+  }
+
+  const receiver = encodeAlgorandAddress(txn.rcv)
+  if (receiver !== policy.receiverWallet) {
+    throw policyViolation(`ALGO payment receiver must be ${policy.receiverWallet}.`)
+  }
+
+  const amount = uintToBigInt(txn.amt, 'ALGO payment amount')
+  if (amount <= 0n) {
+    throw policyViolation('ALGO payment amount must be greater than zero.')
+  }
+
+  if (txn.close !== undefined) {
+    throw policyViolation('ALGO close-out payments are not allowed.')
+  }
+
+  if (txn.rekey !== undefined) {
+    throw policyViolation('Rekey transactions are not allowed.')
+  }
+}
+
+function enforceAsaTransferToReceiver(txn, policy) {
   if (!Buffer.isBuffer(txn.arcv) || txn.arcv.length !== 32) {
     throw new HttpError(400, 'validation_error', 'ASA transfer receiver is missing or invalid.')
   }
 
   const receiver = encodeAlgorandAddress(txn.arcv)
-  if (receiver !== policy.asaReceiverWallet) {
-    throw policyViolation(`ASA receiver must be ${policy.asaReceiverWallet}.`)
+  if (receiver !== policy.receiverWallet) {
+    throw policyViolation(`ASA receiver must be ${policy.receiverWallet}.`)
   }
 
   const assetId = uintToString(txn.xaid, 'ASA transfer asset ID')

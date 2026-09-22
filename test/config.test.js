@@ -63,27 +63,37 @@ test('requires an indexer URL when configured as mandatory', () => {
   )
 })
 
-test('parses ASA-only submission policy', () => {
+test('parses receiver-wallet submission policy', () => {
+  const config = loadConfig({
+    ALGOD_URL: 'http://algod.local',
+    BANK_API_KEYS: 'bank-secret',
+    SUBMISSION_RECEIVER_WALLET: RECEIVER_WALLET,
+    SUBMISSION_ALLOWED_ASSET_IDS: '31566704,123',
+  })
+
+  assert.equal(config.submission.receiverWallet, RECEIVER_WALLET)
+  assert.deepEqual(config.submission.allowedAssetIds, ['31566704', '123'])
+})
+
+test('keeps backward compatibility with the old ASA receiver wallet env var', () => {
   const config = loadConfig({
     ALGOD_URL: 'http://algod.local',
     BANK_API_KEYS: 'bank-secret',
     SUBMISSION_ASA_RECEIVER_WALLET: RECEIVER_WALLET,
-    SUBMISSION_ALLOWED_ASSET_IDS: '31566704,123',
   })
 
-  assert.equal(config.submission.asaReceiverWallet, RECEIVER_WALLET)
-  assert.deepEqual(config.submission.allowedAssetIds, ['31566704', '123'])
+  assert.equal(config.submission.receiverWallet, RECEIVER_WALLET)
 })
 
-test('rejects invalid ASA submission policy configuration', () => {
+test('rejects invalid receiver-wallet submission policy configuration', () => {
   assert.throws(
     () =>
       loadConfig({
         ALGOD_URL: 'http://algod.local',
         BANK_API_KEYS: 'bank-secret',
-        SUBMISSION_ASA_RECEIVER_WALLET: 'not-an-address',
+        SUBMISSION_RECEIVER_WALLET: 'not-an-address',
       }),
-    /SUBMISSION_ASA_RECEIVER_WALLET/,
+    /SUBMISSION_RECEIVER_WALLET/,
   )
 
   assert.throws(
@@ -103,6 +113,6 @@ test('rejects invalid ASA submission policy configuration', () => {
         BANK_API_KEYS: 'bank-secret',
         SUBMISSION_ALLOWED_ASSET_IDS: '31566704',
       }),
-    /SUBMISSION_ASA_RECEIVER_WALLET/,
+    /SUBMISSION_RECEIVER_WALLET/,
   )
 })

@@ -191,7 +191,7 @@ export function defaultConfig(algodUrl = 'http://127.0.0.1:1', indexerUrl = 'htt
       receiverWallet: null,
     },
     submission: {
-      asaReceiverWallet: null,
+      receiverWallet: null,
       allowedAssetIds: [],
     },
     auth: {

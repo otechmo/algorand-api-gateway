@@ -4,7 +4,7 @@ Production-oriented bank-facing API gateway for Algorand MainNet. The intended t
 
 `Bank backend -> HTTPS/mTLS/API key/IP allowlist -> this gateway -> your private algod/indexer MainNet nodes`
 
-The gateway exposes a curated `/v1` API instead of a blind public proxy. It never stores private keys, never signs transactions, and does not expose KMD. When `SUBMISSION_ASA_RECEIVER_WALLET` is configured, transaction submission is restricted to ASA transfers into that receiver wallet only.
+The gateway exposes a curated `/v1` API instead of a blind public proxy. It never stores private keys, never signs transactions, and does not expose KMD. When `SUBMISSION_RECEIVER_WALLET` is configured, transaction submission is restricted to ALGO payments and ASA transfers into that receiver wallet only.
 
 ## Why This Shape
 
@@ -98,7 +98,7 @@ Or JSON with a base64 signed transaction or transaction group:
 
 The gateway checks that its configured algod node is MainNet before forwarding submissions. It does not retry transaction submission automatically because retrying a mutating submit across a timeout can create ambiguous client behavior. Use `Idempotency-Key` for client retries.
 
-If `SUBMISSION_ASA_RECEIVER_WALLET` is set, every submitted signed transaction must be an ASA transfer (`axfer`) with a positive amount and receiver (`arcv`) equal to that wallet. The gateway rejects ALGO payments, application calls, asset config/freeze transactions, ASA clawback (`asnd`), ASA close-out (`aclose`), rekey transactions, zero-amount transfers, and wrong-receiver transfers before any algod broadcast. If `SUBMISSION_ALLOWED_ASSET_IDS` is set, the ASA asset ID (`xaid`) must also be in that comma-separated allowlist.
+If `SUBMISSION_RECEIVER_WALLET` is set, every submitted signed transaction must be either an ALGO payment (`pay`) or ASA transfer (`axfer`) with a positive amount and receiver equal to that wallet. ALGO payments use receiver field `rcv`; ASA transfers use receiver field `arcv`. The gateway rejects application calls, asset config/freeze transactions, ASA clawback (`asnd`), ALGO or ASA close-out (`close`/`aclose`), rekey transactions, zero-amount transfers, and wrong-receiver transfers before any algod broadcast. If `SUBMISSION_ALLOWED_ASSET_IDS` is set, the ASA asset ID (`xaid`) must also be in that comma-separated allowlist.
 
 Policy violations return:
 
@@ -106,7 +106,7 @@ Policy violations return:
 {
   "error": {
     "code": "transaction_policy_violation",
-    "message": "Only Algorand Standard Asset transfer transactions are allowed.",
+    "message": "Only ALGO payments or ASA transfers to the configured receiver wallet are allowed.",
     "requestId": "uuid"
   }
 }
@@ -136,7 +136,7 @@ Required Vercel environment variables:
 - `ALGOD_URL`
 - `BANK_API_KEY_HASHES`
 - `INDEXER_URL` if `REQUIRE_INDEXER=true`
-- `SUBMISSION_ASA_RECEIVER_WALLET` to restrict submissions to ASA deposits into the configured wallet
+- `SUBMISSION_RECEIVER_WALLET` to restrict submissions to ALGO and ASA deposits into the configured wallet
 - `TRUST_PROXY=true`
 - `ENFORCE_MAINNET=true`
 - any upstream token variables required by your approved algod/indexer endpoints
@@ -152,7 +152,7 @@ vercel deploy --prod --yes --scope otechmo20-2970s-projects
 - Point `ALGOD_URL` and `INDEXER_URL` at your own MainNet infrastructure or a private approved upstream.
 - Keep `ENFORCE_MAINNET=true`.
 - Set `BANK_API_KEY_HASHES` instead of raw keys.
-- Set `SUBMISSION_ASA_RECEIVER_WALLET` to the controlled receiving wallet before enabling transaction submission.
+- Set `SUBMISSION_RECEIVER_WALLET` to the controlled receiving wallet before enabling transaction submission.
 - Set `SUBMISSION_ALLOWED_ASSET_IDS` when only specific ASAs should be accepted.
 - Terminate HTTPS either in this process with `TLS_CERT_FILE` and `TLS_KEY_FILE`, or at a private load balancer/reverse proxy.
 - Enable mTLS for bank-to-gateway transport when available.
