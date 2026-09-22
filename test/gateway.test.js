@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { decodeAlgorandAddress } from '../src/algorand-address.js'
 import { MAINNET_GENESIS_HASH } from '../src/config.js'
 import { createFixture, VALID_ADDRESS, VALID_TX_ID } from './fixtures.js'
+
+const RECEIVER_WALLET = 'XPPH747EGEDWQG45MP6VHKXKWGY5LZ6MTCXKR57RXO7QUI6XOBZFOKZPXU'
 
 test('requires authentication for v1 routes', async () => {
   const fixture = await createFixture()
@@ -128,6 +131,107 @@ test('verifies MainNet before accepting transaction submissions and replays idem
   }
 })
 
+test('allows only ASA transfers to the configured receiver wallet for submissions', async () => {
+  const fixture = await createFixture({
+    configOverrides: {
+      submission: {
+        asaReceiverWallet: RECEIVER_WALLET,
+      },
+    },
+  })
+  try {
+    const body = signedTransactionBytes({
+      type: 'axfer',
+      xaid: 31566704,
+      aamt: 1000000,
+      arcv: decodeAlgorandAddress(RECEIVER_WALLET),
+    })
+
+    const response = await fixture.fetch('/v1/transactions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-binary',
+      },
+      body,
+    })
+
+    assert.equal(response.status, 202)
+    assert.equal(fixture.state.submissions, 1)
+  } finally {
+    await fixture.close()
+  }
+})
+
+test('rejects non-ASA or misdirected transaction submissions before algod broadcast', async () => {
+  const fixture = await createFixture({
+    configOverrides: {
+      submission: {
+        asaReceiverWallet: RECEIVER_WALLET,
+      },
+    },
+  })
+  try {
+    const cases = [
+      signedTransactionBytes({
+        type: 'pay',
+        amt: 1000000,
+        rcv: decodeAlgorandAddress(RECEIVER_WALLET),
+      }),
+      signedTransactionBytes({
+        type: 'axfer',
+        xaid: 31566704,
+        aamt: 1000000,
+        arcv: decodeAlgorandAddress(VALID_ADDRESS),
+      }),
+      signedTransactionBytes({
+        type: 'axfer',
+        xaid: 31566704,
+        aamt: 0,
+        arcv: decodeAlgorandAddress(RECEIVER_WALLET),
+      }),
+      signedTransactionBytes({
+        type: 'axfer',
+        xaid: 31566704,
+        aamt: 1000000,
+        arcv: decodeAlgorandAddress(RECEIVER_WALLET),
+        asnd: decodeAlgorandAddress(VALID_ADDRESS),
+      }),
+      signedTransactionBytes({
+        type: 'axfer',
+        xaid: 31566704,
+        aamt: 1000000,
+        arcv: decodeAlgorandAddress(RECEIVER_WALLET),
+        aclose: decodeAlgorandAddress(RECEIVER_WALLET),
+      }),
+      signedTransactionBytes({
+        type: 'axfer',
+        xaid: 31566704,
+        aamt: 1000000,
+        arcv: decodeAlgorandAddress(RECEIVER_WALLET),
+        rekey: decodeAlgorandAddress(VALID_ADDRESS),
+      }),
+    ]
+
+    for (const body of cases) {
+      const response = await fixture.fetch('/v1/transactions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-binary',
+        },
+        body,
+      })
+      const payload = await response.json()
+
+      assert.equal(response.status, 403)
+      assert.equal(payload.error.code, 'transaction_policy_violation')
+    }
+
+    assert.equal(fixture.state.submissions, 0)
+  } finally {
+    await fixture.close()
+  }
+})
+
 test('rejects idempotency key reuse with a different payload', async () => {
   const fixture = await createFixture()
   try {
@@ -245,3 +349,120 @@ test('returns bank self-service audit evidence as a downloadable JSON file', asy
     await fixture.close()
   }
 })
+
+function signedTransactionBytes(txn) {
+  return encodeMsgpack({
+    sig: Buffer.alloc(64, 1),
+    txn,
+  })
+}
+
+function encodeMsgpack(value) {
+  if (Buffer.isBuffer(value)) {
+    return encodeBinary(value)
+  }
+
+  if (typeof value === 'string') {
+    return encodeString(value)
+  }
+
+  if (typeof value === 'number') {
+    return encodeUnsigned(BigInt(value))
+  }
+
+  if (typeof value === 'bigint') {
+    return encodeUnsigned(value)
+  }
+
+  if (Array.isArray(value)) {
+    return Buffer.concat([encodeArrayHeader(value.length), ...value.map(encodeMsgpack)])
+  }
+
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value).filter((entry) => entry[1] !== undefined)
+    const encoded = [encodeMapHeader(entries.length)]
+
+    for (const [key, item] of entries) {
+      encoded.push(encodeString(key), encodeMsgpack(item))
+    }
+
+    return Buffer.concat(encoded)
+  }
+
+  throw new Error('Unsupported test MessagePack value.')
+}
+
+function encodeString(value) {
+  const bytes = Buffer.from(value)
+  if (bytes.length <= 31) {
+    return Buffer.concat([Buffer.from([0xa0 | bytes.length]), bytes])
+  }
+
+  return Buffer.concat([Buffer.from([0xd9, bytes.length]), bytes])
+}
+
+function encodeBinary(value) {
+  if (value.length <= 0xff) {
+    return Buffer.concat([Buffer.from([0xc4, value.length]), value])
+  }
+
+  const header = Buffer.alloc(3)
+  header[0] = 0xc5
+  header.writeUInt16BE(value.length, 1)
+  return Buffer.concat([header, value])
+}
+
+function encodeUnsigned(value) {
+  if (value < 0n) {
+    throw new Error('Unsigned test integer cannot be negative.')
+  }
+
+  if (value <= 0x7fn) {
+    return Buffer.from([Number(value)])
+  }
+
+  if (value <= 0xffn) {
+    return Buffer.from([0xcc, Number(value)])
+  }
+
+  if (value <= 0xffffn) {
+    const output = Buffer.alloc(3)
+    output[0] = 0xcd
+    output.writeUInt16BE(Number(value), 1)
+    return output
+  }
+
+  if (value <= 0xffffffffn) {
+    const output = Buffer.alloc(5)
+    output[0] = 0xce
+    output.writeUInt32BE(Number(value), 1)
+    return output
+  }
+
+  const output = Buffer.alloc(9)
+  output[0] = 0xcf
+  output.writeBigUInt64BE(value, 1)
+  return output
+}
+
+function encodeArrayHeader(length) {
+  if (length <= 15) {
+    return Buffer.from([0x90 | length])
+  }
+
+  const output = Buffer.alloc(3)
+  output[0] = 0xdc
+  output.writeUInt16BE(length, 1)
+  return output
+}
+
+function encodeMapHeader(length) {
+  if (length <= 15) {
+    return Buffer.from([0x80 | length])
+  }
+
+  const output = Buffer.alloc(3)
+  output[0] = 0xde
+  output.writeUInt16BE(length, 1)
+  return output
+}

@@ -128,7 +128,8 @@ paths:
           description: Pending transaction data
   /v1/transactions:
     post:
-      summary: Submit raw signed transaction bytes or base64 JSON
+      summary: Submit raw signed ASA transfer bytes or base64 JSON
+      description: When SUBMISSION_ASA_RECEIVER_WALLET is configured, every submitted signed transaction must be an ASA transfer to that receiver wallet. Wrong transaction types, wrong receivers, clawbacks, close-outs, rekeys, zero-amount transfers, and disallowed asset IDs are rejected before algod broadcast.
       parameters:
         - name: Idempotency-Key
           in: header
@@ -157,6 +158,8 @@ paths:
       responses:
         "202":
           description: Transaction accepted by algod
+        "403":
+          description: Transaction violates the configured ASA receiver policy and was not broadcast
   /v1/transactions/simulate:
     post:
       summary: Simulate transactions using algod

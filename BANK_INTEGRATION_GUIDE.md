@@ -23,7 +23,7 @@ Supported:
 - Algorand Standard Asset, or ASA, lookup and account asset holdings.
 - Historical transaction search through indexer-backed routes.
 - Pending and confirmed transaction status lookup.
-- Submission of already-signed Algorand transactions or transaction groups.
+- Submission of already-signed ASA transfer transactions or transaction groups into the configured receiver wallet.
 - Transaction simulation for pre-submit checks.
 - Bank-grade transport and access controls.
 
@@ -139,6 +139,24 @@ curl -X POST "https://<your-bank-facing-domain>/v1/transactions" \
 
 Use `Idempotency-Key` for bank-side retries. The gateway does not automatically retry transaction submissions because a network timeout after forwarding a transaction can produce an ambiguous client result.
 
+For production receiver protection, transaction submission is configured with:
+
+```text
+SUBMISSION_ASA_RECEIVER_WALLET=XPPH747EGEDWQG45MP6VHKXKWGY5LZ6MTCXKR57RXO7QUI6XOBZFOKZPXU
+```
+
+When this policy is active, every submitted signed transaction must satisfy all of these checks before the gateway forwards it to algod:
+
+- transaction type is ASA transfer, `axfer`
+- receiver field, `arcv`, is `XPPH747EGEDWQG45MP6VHKXKWGY5LZ6MTCXKR57RXO7QUI6XOBZFOKZPXU`
+- ASA amount, `aamt`, is greater than zero
+- optional `SUBMISSION_ALLOWED_ASSET_IDS` allowlist matches the transaction `xaid`, if configured
+- no ASA clawback field, `asnd`
+- no ASA close-out field, `aclose`
+- no rekey field
+
+The gateway rejects ALGO payments, application calls, asset configuration/freeze transactions, wrong-receiver ASA transfers, zero-amount ASA transfers, clawbacks, close-outs, and rekeys with `403 transaction_policy_violation`. Rejected transactions are not broadcast to Algorand.
+
 ## Response Contract
 
 Success:
@@ -210,6 +228,7 @@ READINESS_PUBLIC=false
 RATE_LIMIT_ENABLED=true
 REQUIRE_INDEXER=true
 BANK_API_KEY_HASHES=sha256:<bank-key-hash>
+SUBMISSION_ASA_RECEIVER_WALLET=XPPH747EGEDWQG45MP6VHKXKWGY5LZ6MTCXKR57RXO7QUI6XOBZFOKZPXU
 IP_ALLOWLIST=<bank-egress-cidrs>
 ```
 
@@ -226,4 +245,4 @@ Alternatively, TLS and mTLS can terminate at a private load balancer or reverse 
 
 ## Bank-Facing Statement
 
-Our Algorand MainNet support provides the bank with a controlled API endpoint for reading Algorand network/account/asset data and submitting bank-signed transactions. The solution is non-custodial, does not expose private keys or signing services, and prevents direct bank dependency on public Algorand node providers. Access is protected through HTTPS, optional mTLS, API key authentication, IP allowlisting, rate limits, structured audit logging, and MainNet verification.
+Our Algorand MainNet support provides the bank with a controlled API endpoint for reading Algorand network/account/asset data and submitting bank-signed ASA transfers into the configured receiver wallet. The solution is non-custodial, does not expose private keys or signing services, and prevents direct bank dependency on public Algorand node providers. Access is protected through HTTPS, optional mTLS, API key authentication, IP allowlisting, rate limits, structured audit logging, receiver-wallet transaction policy enforcement, and MainNet verification.

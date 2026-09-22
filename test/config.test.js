@@ -3,6 +3,8 @@ import test from 'node:test'
 
 import { loadConfig, sha256Buffer } from '../src/config.js'
 
+const RECEIVER_WALLET = 'XPPH747EGEDWQG45MP6VHKXKWGY5LZ6MTCXKR57RXO7QUI6XOBZFOKZPXU'
+
 test('requires bank API keys unless unauthenticated mode is explicitly enabled', () => {
   assert.throws(
     () =>
@@ -58,5 +60,49 @@ test('requires an indexer URL when configured as mandatory', () => {
         REQUIRE_INDEXER: 'true',
       }),
     /INDEXER_URL/,
+  )
+})
+
+test('parses ASA-only submission policy', () => {
+  const config = loadConfig({
+    ALGOD_URL: 'http://algod.local',
+    BANK_API_KEYS: 'bank-secret',
+    SUBMISSION_ASA_RECEIVER_WALLET: RECEIVER_WALLET,
+    SUBMISSION_ALLOWED_ASSET_IDS: '31566704,123',
+  })
+
+  assert.equal(config.submission.asaReceiverWallet, RECEIVER_WALLET)
+  assert.deepEqual(config.submission.allowedAssetIds, ['31566704', '123'])
+})
+
+test('rejects invalid ASA submission policy configuration', () => {
+  assert.throws(
+    () =>
+      loadConfig({
+        ALGOD_URL: 'http://algod.local',
+        BANK_API_KEYS: 'bank-secret',
+        SUBMISSION_ASA_RECEIVER_WALLET: 'not-an-address',
+      }),
+    /SUBMISSION_ASA_RECEIVER_WALLET/,
+  )
+
+  assert.throws(
+    () =>
+      loadConfig({
+        ALGOD_URL: 'http://algod.local',
+        BANK_API_KEYS: 'bank-secret',
+        SUBMISSION_ALLOWED_ASSET_IDS: 'not-an-asset-id',
+      }),
+    /SUBMISSION_ALLOWED_ASSET_IDS/,
+  )
+
+  assert.throws(
+    () =>
+      loadConfig({
+        ALGOD_URL: 'http://algod.local',
+        BANK_API_KEYS: 'bank-secret',
+        SUBMISSION_ALLOWED_ASSET_IDS: '31566704',
+      }),
+    /SUBMISSION_ASA_RECEIVER_WALLET/,
   )
 })

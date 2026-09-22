@@ -14,6 +14,7 @@ import { hashCanonicalJson } from './audit-hash.js'
 import { HttpError } from './errors.js'
 import { IdempotencyCache } from './idempotency.js'
 import { TokenBucketLimiter } from './rate-limit.js'
+import { enforceSubmissionPolicy } from './transaction-policy.js'
 import { UpstreamClient } from './upstream.js'
 import {
   parseJsonBuffer,
@@ -257,6 +258,7 @@ async function routeTransactions(req, res, url, segments, ctx, config, upstream,
 
 async function submitTransaction(req, res, ctx, config, upstream, idempotency) {
   const body = await readSignedTransactionBody(req, config)
+  enforceSubmissionPolicy(body, config)
   const idempotencyKey = validateIdempotencyKey(firstHeader(req, 'idempotency-key'))
   const replayed = idempotency.get(ctx.principal.id, idempotencyKey, body)
 

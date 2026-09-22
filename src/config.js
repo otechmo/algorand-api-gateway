@@ -1,6 +1,8 @@
 import crypto from 'node:crypto'
 
+import { normalizeAlgorandAddress } from './algorand-address.js'
 import { ConfigurationError } from './errors.js'
+import { assertUInt64 } from './validators.js'
 
 export const MAINNET_GENESIS_ID = 'mainnet-v1.0'
 export const MAINNET_GENESIS_HASH = 'wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8='
@@ -40,6 +42,15 @@ export function loadConfig(env = process.env) {
 
   const defaultPageLimit = parseInteger(env.DEFAULT_PAGE_LIMIT, 100, 1, 10000, 'DEFAULT_PAGE_LIMIT')
   const maxPageLimit = parseInteger(env.MAX_PAGE_LIMIT, 1000, defaultPageLimit, 10000, 'MAX_PAGE_LIMIT')
+  const submissionAsaReceiverWallet = parseOptionalAlgorandAddress(
+    env.SUBMISSION_ASA_RECEIVER_WALLET || env.ASA_TRANSFER_RECEIVER_WALLET,
+    'SUBMISSION_ASA_RECEIVER_WALLET',
+  )
+  const submissionAllowedAssetIds = parseUInt64List(env.SUBMISSION_ALLOWED_ASSET_IDS, 'SUBMISSION_ALLOWED_ASSET_IDS')
+
+  if (submissionAllowedAssetIds.length > 0 && !submissionAsaReceiverWallet) {
+    throw new ConfigurationError('SUBMISSION_ASA_RECEIVER_WALLET is required when SUBMISSION_ALLOWED_ASSET_IDS is set.')
+  }
 
   return {
     service: {
@@ -81,6 +92,10 @@ export function loadConfig(env = process.env) {
     },
     audit: {
       receiverWallet: emptyToNull(env.AUDIT_RECEIVER_WALLET),
+    },
+    submission: {
+      asaReceiverWallet: submissionAsaReceiverWallet,
+      allowedAssetIds: submissionAllowedAssetIds,
     },
     auth: {
       apiKeyHashes,
@@ -134,6 +149,28 @@ function parseHashValue(value) {
   }
 
   throw new ConfigurationError('BANK_API_KEY_HASHES must contain sha256 hex or base64 values.')
+}
+
+function parseOptionalAlgorandAddress(value, name) {
+  if (!value) {
+    return null
+  }
+
+  try {
+    return normalizeAlgorandAddress(value)
+  } catch {
+    throw new ConfigurationError(`${name} must be a valid Algorand address.`)
+  }
+}
+
+function parseUInt64List(value, name) {
+  return parseList(value).map((item) => {
+    try {
+      return assertUInt64(item, name)
+    } catch {
+      throw new ConfigurationError(`${name} must contain comma-separated uint64 asset IDs.`)
+    }
+  })
 }
 
 function parseBoolean(value, defaultValue) {

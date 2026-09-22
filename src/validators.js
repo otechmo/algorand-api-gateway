@@ -1,32 +1,15 @@
-import crypto from 'node:crypto'
-
+import { normalizeAlgorandAddress } from './algorand-address.js'
 import { HttpError } from './errors.js'
 
-const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
 const UINT64_MAX = (2n ** 64n) - 1n
 const TX_TYPES = new Set(['pay', 'keyreg', 'acfg', 'axfer', 'afrz', 'appl', 'stpf', 'hb'])
 
 export function assertAlgorandAddress(value) {
-  const address = String(value || '').toUpperCase()
-
-  if (!/^[A-Z2-7]{58}$/.test(address)) {
-    throw new HttpError(400, 'validation_error', 'Invalid Algorand address.')
-  }
-
-  const decoded = decodeBase32NoPadding(address)
-  if (decoded.length !== 36) {
-    throw new HttpError(400, 'validation_error', 'Invalid Algorand address.')
-  }
-
-  const publicKey = decoded.subarray(0, 32)
-  const checksum = decoded.subarray(32)
-  const expected = crypto.createHash('sha512-256').update(publicKey).digest().subarray(28)
-
-  if (!crypto.timingSafeEqual(checksum, expected)) {
+  try {
+    return normalizeAlgorandAddress(value)
+  } catch {
     throw new HttpError(400, 'validation_error', 'Invalid Algorand address checksum.')
   }
-
-  return address
 }
 
 export function assertTransactionId(value) {
@@ -135,29 +118,6 @@ export function validateIdempotencyKey(value) {
   }
 
   return value
-}
-
-function decodeBase32NoPadding(value) {
-  let bits = 0
-  let accumulator = 0
-  const bytes = []
-
-  for (const char of value) {
-    const index = BASE32_ALPHABET.indexOf(char)
-    if (index === -1) {
-      throw new HttpError(400, 'validation_error', 'Invalid base32 value.')
-    }
-
-    accumulator = (accumulator << 5) | index
-    bits += 5
-
-    if (bits >= 8) {
-      bytes.push((accumulator >> (bits - 8)) & 0xff)
-      bits -= 8
-    }
-  }
-
-  return Buffer.from(bytes)
 }
 
 function boundedInteger(value, name, min, max) {
