@@ -59,6 +59,7 @@ export function createGatewayHandler(config, deps = {}) {
     try {
       const url = new URL(req.url || '/', 'http://gateway.local')
       stripInternalRouteParams(url)
+      normalizePathApiKeyRoute(url, req)
 
       if (url.pathname === '/health') {
         sendJson(res, 200, {
@@ -364,6 +365,46 @@ function stripInternalRouteParams(url) {
   url.searchParams.delete('gatewayPath')
 }
 
+function normalizePathApiKeyRoute(url, req) {
+  const segments = url.pathname.split('/').filter(Boolean)
+  if (segments[0] !== 'v2' || !segments[1]) {
+    return
+  }
+
+  req.pathApiKey = decodeRouteSegment(segments[1])
+
+  const route = segments.slice(2).join('/')
+  if (!route || route === 'status') {
+    url.pathname = '/v1/network/status'
+    return
+  }
+
+  if (route === 'params') {
+    url.pathname = '/v1/network/params'
+    return
+  }
+
+  if (route === 'ready') {
+    url.pathname = '/ready'
+    return
+  }
+
+  if (route === 'health') {
+    url.pathname = '/health'
+    return
+  }
+
+  url.pathname = route.startsWith('v1/') ? `/${route}` : `/v1/${route}`
+}
+
+function decodeRouteSegment(value) {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    throw new HttpError(400, 'validation_error', 'Invalid API key path segment.')
+  }
+}
+
 function auditLog(logger, req, res, ctx, startedAt) {
   const level = res.statusCode >= 500 ? 'error' : 'log'
   logger[level](
@@ -383,10 +424,20 @@ function auditLog(logger, req, res, ctx, startedAt) {
 function safePath(value) {
   try {
     const url = new URL(value, 'http://gateway.local')
-    return url.pathname
+    return redactPathApiKey(url.pathname)
   } catch {
     return '/'
   }
+}
+
+function redactPathApiKey(pathname) {
+  const segments = pathname.split('/').filter(Boolean)
+  if (segments[0] === 'v2' && segments[1]) {
+    segments[1] = '[REDACTED]'
+    return `/${segments.join('/')}`
+  }
+
+  return pathname
 }
 
 function isStrictBase64(value) {

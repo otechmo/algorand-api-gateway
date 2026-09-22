@@ -23,6 +23,16 @@ For a bank/shareable overview of the support model, onboarding flow, Ethereum-to
 
 All non-health routes require `Authorization: Bearer <bank-api-key>` or `X-API-Key: <bank-api-key>` unless `ALLOW_UNAUTHENTICATED=true`.
 
+The gateway also supports an Alchemy-style key-in-path format for bank systems that prefer a single base URL:
+
+```text
+https://algorand-api-gateway.vercel.app/v2/<bank-api-key>/status
+https://algorand-api-gateway.vercel.app/v2/<bank-api-key>/params
+https://algorand-api-gateway.vercel.app/v2/<bank-api-key>/accounts/{address}/transactions?limit=1
+```
+
+`/v2/<bank-api-key>/status` maps to `/v1/network/status`. Any other path after the key maps to the curated `/v1` API, so `/v2/<bank-api-key>/accounts/{address}` maps to `/v1/accounts/{address}`. Headers are still preferred for production because URL paths can appear in platform access logs.
+
 | Method | Path | Upstream |
 | --- | --- | --- |
 | `GET` | `/health` | local liveness only |

@@ -107,11 +107,15 @@ function extractApiKey(req) {
 
   const authorization = firstHeader(req, 'authorization')
   if (!authorization) {
-    return null
+    return req.pathApiKey || null
   }
 
   const match = authorization.match(/^Bearer\s+(.+)$/i)
-  return match ? match[1].trim() : null
+  if (match) {
+    return match[1].trim()
+  }
+
+  return req.pathApiKey || null
 }
 
 function matchesIpRule(ip, rule) {

@@ -134,6 +134,17 @@ test('emits SIEM-ingestible structured audit logs without leaking secrets', asyn
     assert.equal(serialized.includes('bank-secret'), false)
     assert.equal(serialized.includes('authorization'), false)
     assert.equal(serialized.includes('X-API-Key'), false)
+
+    const pathKeyResponse = await fixture.rawFetch('/v2/bank-secret/v1/network/status', {
+      headers: {
+        'X-Request-ID': 'siem-test-path-key',
+      },
+    })
+    assert.equal(pathKeyResponse.status, 200)
+
+    const pathKeyEntry = entries.find((item) => item.requestId === 'siem-test-path-key')
+    assert.equal(pathKeyEntry.path, '/v2/[REDACTED]/v1/network/status')
+    assert.equal(JSON.stringify(pathKeyEntry).includes('bank-secret'), false)
   } finally {
     await fixture.close()
   }

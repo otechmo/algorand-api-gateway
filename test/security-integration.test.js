@@ -93,6 +93,37 @@ test('rate limits authenticated clients by principal and IP', async () => {
   }
 })
 
+test('accepts API key from Alchemy-style path prefix', async () => {
+  const fixture = await createFixture()
+  try {
+    const status = await fixture.rawFetch('/v2/bank-secret/status')
+    assert.equal(status.status, 200)
+
+    const params = await fixture.rawFetch('/v2/bank-secret/v1/network/params')
+    assert.equal(params.status, 200)
+
+    const transactions = await fixture.rawFetch(`/v2/bank-secret/accounts/${VALID_ADDRESS}/transactions?limit=1`)
+    assert.equal(transactions.status, 200)
+
+    const indexerRequest = fixture.state.indexerRequests.find((request) => {
+      return request.pathname === `/v2/accounts/${VALID_ADDRESS}/transactions`
+    })
+    assert.equal(indexerRequest.searchParams.get('limit'), '1')
+  } finally {
+    await fixture.close()
+  }
+})
+
+test('rejects invalid API key from path prefix', async () => {
+  const fixture = await createFixture()
+  try {
+    const response = await fixture.rawFetch('/v2/wrong-bank-key/status')
+    assert.equal(response.status, 401)
+  } finally {
+    await fixture.close()
+  }
+})
+
 test('rejects oversized request bodies before upstream submission', async () => {
   const fixture = await createFixture({
     configOverrides: {
